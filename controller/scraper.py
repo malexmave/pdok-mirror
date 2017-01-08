@@ -1,11 +1,11 @@
 # -*- encoding: utf-8 -*-
 """Scraper for the pdoc file structures."""
 
-from util.util import _download_tuple, get_html
+from util.util import _download_tuple, get_html, pdf_to_text
 from models.database import Wahlperiode, Plenarprotokoll, Drucksache
-from multiprocessing.pool import ThreadPool
+from multiprocessing.pool import ThreadPool, Process
 from peewee import DoesNotExist
-from functools import partial
+from sys import stdout
 import re
 import os
 
@@ -35,12 +35,14 @@ def scrape_period(period_no):
     # Ensure directory structure exists
     if not os.path.exists('documents/' + period_no + "/Plenarprotokoll"):
         os.makedirs('documents/' + period_no + "/Plenarprotokoll")
-    if not os.path.exists('documents/' + period_no + "/Druchsache"):
+    if not os.path.exists('documents/' + period_no + "/Drucksache"):
         os.makedirs('documents/' + period_no + "/Drucksache")
 
     # Scrape all Plenarprotokolle
+    print "INFO: Scraping Plenarprotokolle for period", period_no
     scrape_period_plenarprotokoll(period)
     # Scrape Drucksachen
+    print "INFO: Scraping Drucksachen for period", period_no
     scrape_period_drucksachen(period)
 
 
@@ -62,14 +64,30 @@ def scrape_period_plenarprotokoll(period):
 
     # TODO Add progress bars to all of this
     # Perform download
+    print "INFO: Downloading Plenarprotokolle...",
+    stdout.flush()
     results = pool.map(_download_tuple, workqueue)
+    print "DONE."
 
     # Close and terminate pool
     pool.close()
     pool.join()
 
+    # Create background process for pdftotext operations
+    p = Process(target=pdf_to_text, args=(results, ), name="conv_plenary")
+    p.start()
+
+    print "INFO: Inserting to database...",
+    stdout.flush()
     for result in results:
         process_plenarprotokoll(period, result)
+
+    # Wait for conversion worker to finish
+    print "DONE."
+    print "INFO: Waiting for text file conversion to finish...",
+    stdout.flush()
+    p.join()
+    print "DONE."
     # # Create a new pool for processing the finished downloads
     # pool = ThreadPool(processes=INSERT_WORKERS)
     # # Define a partial function to make calling the processing function easier
@@ -103,15 +121,29 @@ def scrape_period_drucksachen(period):
 
     # TODO Add progress bars
     # Perform download
+    print "INFO: Downloading Drucksachen...",
+    stdout.flush()
     results = pool.map(_download_tuple, workqueue)
+    print "DONE."
 
     # Close and terminate pool
     pool.close()
     pool.join()
 
+    # Create background process for pdftotext operations
+    p = Process(target=pdf_to_text, args=(results, ), name="conv_druck")
+    p.start()
+
+    print "INFO: Inserting into database...",
+    stdout.flush()
     for result in results:
         process_drucksache(period, result)
-
+    print "DONE"
+    # Wait for text file conversion to finish
+    print "INFO: Waiting for text file conversion to finish...",
+    stdout.flush()
+    p.join()
+    print "DONE."
     # Create new database worker pool
     # pool = ThreadPool(processes=INSERT_WORKERS)
 
@@ -158,9 +190,6 @@ def process_plenarprotokoll(period, path):
     source = BASEURL_DOC_PLENARY.format(filename[:2], filename[2:])
     proto = Plenarprotokoll.create(docno=docno, date=date, path=path,
                                    period=period, title=title, source=source)
-    # TODO Add Source URL
-    # TODO Add digest? Would have to be crawled as well
-    print proto.docno, proto.date, proto.path
 
 
 def process_drucksache(period, path):
@@ -197,9 +226,6 @@ def process_drucksache(period, path):
     proto = Drucksache.create(docno=docno, date=date, path=path, period=period,
                               title=title, doctype=doctype, urheber=urheber,
                               autor=autor, source=source)
-    # TODO Add Source URL
-    # TODO Add digest? Would have to be crawled as well
-    print proto.docno, proto.date, proto.path
 
 
 def scrape_plenarprotokoll_meta(docno):

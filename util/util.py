@@ -3,6 +3,7 @@
 
 import requests
 import os.path
+import subprocess
 
 
 def download(url, filename, session=None):
@@ -63,3 +64,28 @@ def get_html(url, session=None):
 def get_session():
     """Get a Requests session."""
     return requests.Session()
+
+
+def pdf_to_text(files):
+    """Convert a number of PDFs to text files using pdftotext.
+
+    Arguments:
+    files -- a List of files (as paths) to convert
+    """
+    # Ensure pdftotext is installed
+    devnull = open(os.devnull, "w")
+    try:
+        subprocess.Popen(["pdftotext"], stdout=devnull, stderr=devnull).communicate()
+    except OSError as e:
+        if e.errno == os.errno.ENOENT:
+            print "WARN: Please install pdftotext to enable automatic conversion to text files"
+            return
+        else:
+            raise e
+
+    # pdftotext is installed - Process files
+    for file in files:
+        if file is None:
+            continue
+        subprocess.Popen(["pdftotext", "-layout", file], stdout=devnull, stderr=devnull).communicate()
+    pass

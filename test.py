@@ -1,4 +1,4 @@
 from controller import scraper
 
-scraper.scrape_period(1)
-
+for i in range(1, 19):
+    scraper.scrape_period(i)
