@@ -174,7 +174,7 @@ def process_plenarprotokoll(period, path):
     # Check if database entry already exists
     try:
         proto = Plenarprotokoll.get(docno=docno)
-        print "WARN: Database entry for plenary", docno, "already exists. Skipping"
+        # print "WARN: Database entry for plenary", docno, "already exists. Skipping"
         return
     except DoesNotExist:
         pass
@@ -214,7 +214,7 @@ def process_drucksache(period, path):
     # Check if database entry already exists
     try:
         proto = Drucksache.get(docno=docno)
-        print "WARN: Database entry for Drucksache", docno, "already exists. Skipping"
+        # print "WARN: Database entry for Drucksache", docno, "already exists. Skipping"
         return
     except DoesNotExist:
         pass
