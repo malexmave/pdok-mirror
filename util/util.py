@@ -16,7 +16,9 @@ def download(url, filename, session=None):
     """
     # Check if file already exists
     if os.path.isfile(filename):
-        return None
+        # File already exists, just return a reference to it.
+        # (already processed files will be ignored by processing)
+        return filename
 
     # Start downloading the file in streaming mode, to save memory
     if session is None:
