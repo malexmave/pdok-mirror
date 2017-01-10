@@ -225,7 +225,7 @@ def process_drucksache(period, path):
         title, date, doctype, urheber, autor = metadata
     else:
         print "ERROR: No metadata found for Drucksache", docno, "- skipping"
-
+        return
     if date is None:
         print "ERROR: Scraping plenary meta appears to have failed for docno", docno
         return
