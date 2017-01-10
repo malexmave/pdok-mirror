@@ -4,6 +4,7 @@
 import requests
 import os.path
 import subprocess
+import time
 
 
 def download(url, filename, session=None):
@@ -21,12 +22,19 @@ def download(url, filename, session=None):
         return filename
 
     # Start downloading the file in streaming mode, to save memory
-    if session is None:
-        # No session passed, create new connection
-        req = requests.get(url, stream=True)
-    else:
-        # Reuse old session
-        req = session.get(url, stream=True)
+    # Do this in an endless loop to catch any connection errors and retry
+    while True:
+        try:
+            if session is None:
+                # No session passed, create new connection
+                req = requests.get(url, stream=True)
+            else:
+                # Reuse old session
+                req = session.get(url, stream=True)
+            break
+        except requests.exceptions.ConnectionError:
+            # We got a connection error. Sleep 1 second and try again.
+            time.sleep(1)
 
     # Check if the file actually exists
     if req.status_code == 404:
@@ -88,6 +96,8 @@ def pdf_to_text(files):
     # pdftotext is installed - Process files
     for file in files:
         if file is None:
+            continue
+        if os.path.isfile(file[:-4] + ".txt"):
             continue
         subprocess.Popen(["pdftotext", "-layout", file], stdout=devnull, stderr=devnull).communicate()
     pass
