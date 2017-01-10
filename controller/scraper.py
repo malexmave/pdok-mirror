@@ -180,7 +180,12 @@ def process_plenarprotokoll(period, path):
         pass
 
     # Retrieve metadata on entry
-    title, date = scrape_plenarprotokoll_meta(docno)
+    metadata = scrape_plenarprotokoll_meta(docno)
+    if metadata is not None:
+        title, date = metadata
+    else:
+        print "ERROR: No Metadata found for Plenarprotokoll", docno, "- skipping"
+        return
 
     if date is None:
         print "ERROR: Scraping plenary meta appears to have failed for docno", docno
@@ -215,7 +220,11 @@ def process_drucksache(period, path):
         pass
 
     # Retrieve metadata on entry
-    title, date, doctype, urheber, autor = scrape_drucksache_meta(docno)
+    metadata = scrape_drucksache_meta(docno)
+    if metadata is not None:
+        title, date, doctype, urheber, autor = metadata
+    else:
+        print "ERROR: No metadata found for Drucksache", docno, "- skipping"
 
     if date is None:
         print "ERROR: Scraping plenary meta appears to have failed for docno", docno
