@@ -108,7 +108,7 @@ def scrape_period_drucksachen(period):
     """
     pool = ThreadPool(processes=DOWNLOAD_WORKERS)
     workqueue = []
-    for number in range(period.drucksache_max + 1, 10000):
+    for number in range(period.drucksache_max + 1, 100000):
         number = "%05d" % number
         prefix = number[:3]
 
