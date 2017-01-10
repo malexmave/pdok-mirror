@@ -60,10 +60,15 @@ def get_html(url, session=None):
     url     -- the URL as a string
     session -- a requests.Session-Object to use, or None if none should be used
     """
-    if session is None:
-        req = requests.get(url)
-    else:
-        req = session.get(url)
+    while True:
+        try:
+            if session is None:
+                req = requests.get(url)
+            else:
+                req = session.get(url)
+            break
+        except requests.exceptions.ConnectionError:
+            time.sleep(1)
 
     if req.status_code != 200:
         print "ERROR: get_html failed, status code", req.status_code, "on URL", url
