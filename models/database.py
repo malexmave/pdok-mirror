@@ -3,6 +3,7 @@
 
 from peewee import *
 
+
 db = SqliteDatabase('pdoc.sqlite', threadlocals=True)
 
 
@@ -19,6 +20,11 @@ class Wahlperiode(Model):
     plenary_max = IntegerField(default=0)
     # Highest seen Drucksache number
     drucksache_max = IntegerField(default=0)
+
+    # Period scraped
+    period_scraped = BooleanField(default=False)
+    # Period uploaded to Archive
+    period_uploaded = BooleanField(default=False)
 
     class Meta:
         """Meta information about model."""
