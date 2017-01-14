@@ -14,7 +14,7 @@ class Wahlperiode(Model):
     dbid = PrimaryKeyField()
 
     # Wahlperiodennummer
-    period_no = CharField()
+    period_no = CharField(index=True)
 
     # Highest seen Plenarprotokoll number
     plenary_max = IntegerField(default=0)
@@ -39,7 +39,7 @@ class Document(Model):
     dbid = PrimaryKeyField()
 
     # Document number (e.g. 18/001 or 17/14600)
-    docno = CharField()
+    docno = CharField(index=True)
     # Internet Archive Identifier
     archive_ident = CharField(null=True)
     # Title of the document

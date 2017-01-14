@@ -21,16 +21,21 @@ BASEPATH_FILE_PLENARY = "documents/{0}/Plenarprotokoll/{0}{1}.pdf"
 BASEPATH_FILE_DRUCKSACHE = "documents/{0}/Drucksache/{0}{1}.pdf"
 
 
-def scrape_period(period_no):
+def scrape_period(period_no_numeric, max_period):
     """Scrape all data for a specific election period.
 
     Arguments:
-    period_no -- The number of the period.
+    period_no_numeric -- The number of the period.
     """
     # Format period number properly
-    period_no = '%02d' % period_no
+    period_no = '%02d' % period_no_numeric
     # Get from database or create
     period = Wahlperiode.get_or_create(period_no=period_no)[0]
+
+    # If the period has already been scraped, return instantly
+    if period.period_scraped:
+        print "INFO: Period", period_no, "has already been scraped - skipping"
+        return
 
     # Ensure directory structure exists
     if not os.path.exists('documents/' + period_no + "/Plenarprotokoll"):
@@ -45,6 +50,18 @@ def scrape_period(period_no):
     print "INFO: Scraping Drucksachen for period", period_no
     scrape_period_drucksachen(period)
 
+    # Check if we have processed an old period, and if yes, mark it as
+    # completely downloaded (in the hopes that all downloaded files are in
+    # order, and none of them failed)
+    # TODO Maybe add a check that all files are indeed application/pdf files
+    #      before marking the period as completed, just to be sure?
+    if period_no_numeric < max_period:
+        print "INFO: Marking period", period_no, "as completely scraped."
+        period.period_scraped = True
+
+    # Save changes to the period database entry
+    period.save()
+
 
 def scrape_period_plenarprotokoll(period):
     """Scrape the website for Plenarprotokolle in the given period.
@@ -54,7 +71,14 @@ def scrape_period_plenarprotokoll(period):
     """
     pool = ThreadPool(processes=DOWNLOAD_WORKERS)
     workqueue = []
-    for number in range(period.plenary_max + 1, 1000):
+    for number in range(1, 1000):
+        # We do not start from the highest already scraped plenary because
+        # the download code also checks if the file was successfully downloaded
+        # as a PDF file.  Thus, if any error sneaks through on one pass, e.g.
+        # because the server is unavailable for a moment, it will get fixed
+        # automatically on the next pass.
+        # As the metadata remains unchanged, we don't need to reprocess these
+        # files in the database.
         number = '%03d' % number
         url = BASEURL_DOC_PLENARY.format(period.period_no, number)
         file = BASEPATH_FILE_PLENARY.format(period.period_no, number)
@@ -88,16 +112,6 @@ def scrape_period_plenarprotokoll(period):
     stdout.flush()
     p.join()
     print "DONE."
-    # # Create a new pool for processing the finished downloads
-    # pool = ThreadPool(processes=INSERT_WORKERS)
-    # # Define a partial function to make calling the processing function easier
-    # partial_process = partial(process_plenarprotokoll, period)
-
-    # # Process finished downloads
-    # pool.map(partial_process, results)
-    # # Clean up pool
-    # pool.close()
-    # pool.join()
 
 
 def scrape_period_drucksachen(period):
@@ -108,7 +122,14 @@ def scrape_period_drucksachen(period):
     """
     pool = ThreadPool(processes=DOWNLOAD_WORKERS)
     workqueue = []
-    for number in range(period.drucksache_max + 1, 20000):
+    for number in range(0 + 1, 20000):
+        # We do not start from the highest already scraped Drucksache because
+        # the download code also checks if the file was successfully downloaded
+        # as a PDF file.  Thus, if any error sneaks through on one pass, e.g.
+        # because the server is unavailable for a moment, it will get fixed
+        # automatically on the next pass.
+        # As the metadata remains unchanged, we don't need to reprocess these
+        # files in the database.
         number = "%05d" % number
         prefix = number[:3]
 
@@ -144,17 +165,6 @@ def scrape_period_drucksachen(period):
     stdout.flush()
     p.join()
     print "DONE."
-    # Create new database worker pool
-    # pool = ThreadPool(processes=INSERT_WORKERS)
-
-    # # Define a partial function to make calling the processing function easier
-    # partial_process = partial(process_drucksache, period)
-
-    # # Process finished downloads
-    # pool.map(partial_process, results)
-    # # Clean up pool
-    # pool.close()
-    # pool.join()
 
 
 def process_plenarprotokoll(period, path):
@@ -169,11 +179,18 @@ def process_plenarprotokoll(period, path):
     # Split path to get document number without .pdf
     filename = path.split("/")[3][:-4]
     # Derive canonical document number
-    docno = filename[:2] + "/" + str(int(filename[2:]))
+    period_part = filename[:2]
+    number_part = int(filename[2:])
+    docno = period_part + "/" + str(number_part)
+
+    # Check if we already processed this
+    if period.plenary_max >= number_part:
+        return
 
     # Check if database entry already exists
     try:
-        proto = Plenarprotokoll.get(docno=docno)
+        Plenarprotokoll.get(docno=docno)
+        period.plenary_max = number_part
         # print "WARN: Database entry for plenary", docno, "already exists. Skipping"
         return
     except DoesNotExist:
@@ -193,8 +210,15 @@ def process_plenarprotokoll(period, path):
 
     # Create new database entry
     source = BASEURL_DOC_PLENARY.format(filename[:2], filename[2:])
-    proto = Plenarprotokoll.create(docno=docno, date=date, path=path,
-                                   period=period, title=title, source=source)
+    Plenarprotokoll.create(docno=docno, date=date, path=path,
+                           period=period, title=title, source=source)
+
+    # Update maximum processed number, modulo special cases (which are always
+    # above 399, as experience shows).  This allows us to later skip already
+    # processed documents more efficiently (compared to querying the database
+    # for each document, which is quite a drag on performance using SQLite)
+    if number_part < 399:
+        period.plenary_max = number_part
 
 
 def process_drucksache(period, path):
@@ -209,12 +233,18 @@ def process_drucksache(period, path):
     # Split path to get document number without .pdf
     filename = path.split("/")[3][:-4]
     # Derive canonical document number
-    docno = filename[:2] + "/" + str(int(filename[2:]))
+    number_part = int(filename[2:])
+    docno = filename[:2] + "/" + str(number_part)
 
+    # Skip already processed documents
+    if number_part <= period.drucksache_max:
+        return
     # Check if database entry already exists
     try:
-        proto = Drucksache.get(docno=docno)
+        Drucksache.get(docno=docno)
         # print "WARN: Database entry for Drucksache", docno, "already exists. Skipping"
+        period.drucksache_max = number_part
+        period.save()
         return
     except DoesNotExist:
         pass
@@ -232,9 +262,12 @@ def process_drucksache(period, path):
 
     # Create new database entry
     source = BASEURL_DOC_DRUCKSACHE.format(filename[:2], filename[2:5], filename[2:])
-    proto = Drucksache.create(docno=docno, date=date, path=path, period=period,
-                              title=title, doctype=doctype, urheber=urheber,
-                              autor=autor, source=source)
+    Drucksache.create(docno=docno, date=date, path=path, period=period,
+                      title=title, doctype=doctype, urheber=urheber,
+                      autor=autor, source=source)
+
+    # Update maximum processed Drucksachen-number
+    period.drucksache_max = number_part
 
 
 def scrape_plenarprotokoll_meta(docno):
@@ -245,6 +278,9 @@ def scrape_plenarprotokoll_meta(docno):
 
     Returns a 2-tuple of metadata: (title, date)
     """
+    res = check_hardcoded_cornercases_plenary(docno)
+    if res is not None:
+        return res
     # Assemble URL
     url = BASEURL_META_PLENARY.format(docno)
     # Get HTML
@@ -279,8 +315,15 @@ def scrape_drucksache_meta(docno):
     Arguments:
     docno -- The document number in the canonical format (e.g. 13/37, but not 13/037)
 
-    Returns a 2-tuple of metadata: (title, date, doctype, urheber, autor)
+    Returns a 5-tuple of metadata: (title, date, doctype, urheber, autor)
     """
+    # Some documents have weird cornercases, which have been solved through
+    # hardcoded results.  This is not pretty, but preferrable to the
+    # alternative of not having metadata for them
+    res = check_hardcoded_cornercases_drucksache(docno)
+    if res is not None:
+        return res
+
     # Assemble URL
     url = BASEURL_META_DRUCKSACHE.format(docno)
     # Get HTML
@@ -321,3 +364,57 @@ def scrape_drucksache_meta(docno):
         autoren = autoren_results[0]
 
     return (title_results[0], meta_results[2], meta_results[3], urheber, autoren)
+
+
+def check_hardcoded_cornercases_drucksache(docno):
+    """Check if the document number is a weird corner case.
+
+    Some documents aren't findable properly using the PDOK system. This can be
+    from a number of reasons, but the result is that we have to manually add
+    them to our database. To make this easier, these cornercases are handled
+    explicitly in the code, as far as they are known at the time of writing.
+    If you encounter any additional corner cases, send a pull request with the
+    updated information :).
+
+    Arguments:
+    docno -- the document number to check for corner cases
+    """
+    cornercases = {
+        # Order in tuple: (title, date, doctype, urheber, autor)
+        "06/10001": ("Zwischenbericht über den Vollzug des Gesetzes zum Schutz gegen Fluglärm vom 30. März 1972 (BGBl. I S. 282) Bezug: Beschluß des Deutschen Bundestages vom 16. Dezember 1970 - Drucksache VI/1377 - ",
+                     "20.10.1972", "Unterrichtung", "Bundesministerium des Innern", None),
+        "06/10002": ("Bericht des Parlamentarischen Staatssekretärs Heinz Westphal im Bundesministerium für Jugend, Familie und Gesundheit über Rauschmittelmißbrauch",
+                     "31.10.1972", "Unterrichtung", "Bundesministerium für Jugend, Familie und Gesundheit", None),
+        "06/10003": ("Bericht des Bundesministers des Innern über Rauschmittelmißbrauch",
+                     "06.11.1972", "Unterrichtung", "Bundesministerium des Innern", None),
+    }
+    try:
+        return cornercases[docno]
+    except:
+        return None
+
+
+def check_hardcoded_cornercases_plenary(docno):
+    """Check if the document number is a weird corner case.
+
+    Some documents aren't findable properly using the PDOK system. This can be
+    from a number of reasons, but the result is that we have to manually add
+    them to our database. To make this easier, these cornercases are handled
+    explicitly in the code, as far as they are known at the time of writing.
+    If you encounter any additional corner cases, send a pull request with the
+    updated information :).
+
+    Arguments:
+    docno -- the document number to check for corner cases
+    """
+    cornercases = {
+        # Order in tuple: (title, date)
+        "16/300": ("13. Bundesversammlung der Bundesrepublik Deutschland", "23.05.2009"),
+        "17/500": ("15. Bundesversammlung der Bundesrepublik Deutschland", "18.03.2012"),
+        "17/907": ("15. Bundesversammlung der Bundesrepublik Deutschland", "18.03.2012"),
+
+    }
+    try:
+        return cornercases[docno]
+    except:
+        return None

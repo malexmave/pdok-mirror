@@ -5,21 +5,30 @@ import requests
 import os.path
 import subprocess
 import time
+import magic
 
 
-def download(url, filename, session=None):
+def download(url, filename, session=None, retry=0):
     """Download a file, if it exists.
 
     Arguments:
     url      -- the url to download
     filename -- the filename to which the file should be saved
     session  -- a requests.Session-Object to use (to persist connections)
+    retry    -- Retry count
     """
     # Check if file already exists
     if os.path.isfile(filename):
+        # Check if file is indeed a PDF file
         # File already exists, just return a reference to it.
         # (already processed files will be ignored by processing)
-        return filename
+        if is_pdf(filename):
+            return filename
+        # If this statement is reached, the file exists but isn't a .pdf
+        # Delete the file and any converted plaintext version, if it exists
+        os.remove(filename)
+        if os.path.isfile(filename[:-4] + ".txt"):
+            os.remove(filename[:-4] + ".txt")
 
     # Start downloading the file in streaming mode, to save memory
     # Do this in an endless loop to catch any connection errors and retry
@@ -45,6 +54,14 @@ def download(url, filename, session=None):
         # Write to file in chunks
         for chunk in req.iter_content(chunk_size=1024000):
             fo.write(chunk)
+
+    # Check if we have actually downloaded a PDF file
+    if not is_pdf(filename):
+        if retry >= 3:
+            print "ERROR: Downloaded file", filename, "appears to not be a PDF. Using anyway."
+            return filename
+        time.sleep(1)
+        download(url, filename, session, retry + 1)
     return filename
 
 
@@ -106,3 +123,16 @@ def pdf_to_text(files):
             continue
         subprocess.Popen(["pdftotext", "-layout", file], stdout=devnull, stderr=devnull).communicate()
     pass
+
+
+def is_pdf(filepath):
+    """Check if a file is a PDF file.
+
+    Arguments
+    filepath -- path to the file to check
+    """
+    if filepath is None or not os.path.isfile(filepath):
+        return False
+
+    mime = magic.Magic(mime=True)
+    return mime.from_file(filepath) == "application/pdf"
