@@ -1,0 +1,4 @@
+internetarchive>=1.1.0
+peewee>=2.8.5
+python-magic>=0.4.12
+requests>=2.12.4
