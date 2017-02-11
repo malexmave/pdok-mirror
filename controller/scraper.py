@@ -26,7 +26,7 @@ import re
 import os
 
 
-DOWNLOAD_WORKERS = 20
+DOWNLOAD_WORKERS = 3
 INSERT_WORKERS = 2
 
 BASEURL_META_PLENARY = "http://pdok.bundestag.de/treffer.php?q={}&wp=&dart=Plenarprotokoll"
