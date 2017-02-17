@@ -58,8 +58,7 @@ def upload_plenarprotokoll(period):
                         credits=u"Steganografischer Dienst des Bundestages",  # TODO Add authors / steganografischer Dienst here
                         description=u'<p>Plenarprotokoll des deutschen Bundestages vom ' + str(plenary.date) + u'.</p><br><p>Automatically mirrored from the german <a href="http://pdok.bundestag.de/" target="blank">parliamentary documentation system</a>. Reproduction without modification allowed as long as the source is credited (according to § 5 Abs. 2 of the german Urheberrecht).</p><p>This is not the authoritative version, but an unofficial mirror. Please check the primary sources when in doubt.</p><p>This post was automatically created using <a href="https://github.com/malexmave/pdok-mirror" target="blank">pdok-mirror</a> and the python <a href="https://internetarchive.readthedocs.io/en/latest/" target="blank">internetarchive</a> library.</p>',  # TODO Update
                         language=u"ger",
-                        subject=["Deutscher Bundestag", "Plenarprotokoll", "Legislaturperiode " + str(period.period_no)],
-                        queue_derive=False
+                        subject=["Deutscher Bundestag", "Plenarprotokoll", "Legislaturperiode " + str(period.period_no)]
                         )
         identifier = 'ger-bt-plenary-' + plenary.docno.replace('/', '-')
         to_upload += [(identifier, {plenary.path.split('/')[-1]: plenary.path}, metadata, plenary)]
@@ -80,7 +79,7 @@ def upload_parallel(params):
         print "ERROR: Bad parameters"
         return
     identifier, files, metadata, plenary = params
-    r = upload(identifier, files=files, metadata=metadata, retries=5)
+    r = upload(identifier, files=files, metadata=metadata, retries=5, queue_derive=False)
     if r[0].status_code != 200:
         print "ERROR: Upload of", identifier, "failed:", r[0].status_code
         return None
