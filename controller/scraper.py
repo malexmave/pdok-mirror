@@ -428,6 +428,7 @@ def check_hardcoded_cornercases_plenary(docno):
         "16/300": ("13. Bundesversammlung der Bundesrepublik Deutschland", "23.05.2009"),
         "17/500": ("15. Bundesversammlung der Bundesrepublik Deutschland", "18.03.2012"),
         "17/907": ("15. Bundesversammlung der Bundesrepublik Deutschland", "18.03.2012"),
+        "18/909": ("16. Bundesversammlung der Bundesrepublik Deutschland", "12.02.2017"),
 
     }
     try:
