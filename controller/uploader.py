@@ -39,6 +39,8 @@ def upload_legislaturperiode(period_no_numeric):
 
     # Upload all plenary protocols
     upload_plenarprotokoll(period)
+    # Upload all Drucksachen
+    upload_drucksachen(period)
 
 
 def upload_plenarprotokoll(period):
@@ -62,8 +64,9 @@ def upload_plenarprotokoll(period):
                         )
         identifier = 'ger-bt-plenary-' + plenary.docno.replace('/', '-')
         to_upload += [(identifier, {plenary.path.split('/')[-1]: plenary.path}, metadata, plenary)]
-    pool = ThreadPool(processes=5)
+    pool = ThreadPool(processes=10)
     results = pool.map(upload_parallel, to_upload)
+    pool.close()
     for result in results:
         if result is None:
             continue
@@ -73,19 +76,62 @@ def upload_plenarprotokoll(period):
         plenary.save()
 
 
+def upload_drucksachen(period):
+    """Upload all drucksachen belonging to the given period."""
+    to_upload = []
+    for drucksache in Drucksache.select().where(Drucksache.period == period):
+        if drucksache.archive_ident is not None:
+            continue
+        metadata = dict(collection='deutscherbundestag',
+                        title=drucksache.docno + " - " + drucksache.title,
+                        mediatype='texts',
+                        source=u'<a href="http://pdok.bundestag.de/" target="blank">Parlamentarisches Dokumentationssystem</a>',
+                        contributor=u'<a href="https://twitter.com/malexmave">@malexmave</a>',
+                        rights=u'Free to republish without modification as long as the source is credited, as per § 5 Abs. 2 UrhG',
+                        publisher=u"Deutscher Bundestag",
+                        description=u'<p>Drucksache des deutschen Bundestages vom ' + str(drucksache.date) + u'.</p><br><p>Automatically mirrored from the german <a href="http://pdok.bundestag.de/" target="blank">parliamentary documentation system</a>. Reproduction without modification allowed as long as the source is credited (according to § 5 Abs. 2 of the german Urheberrecht).</p><p>This is not the authoritative version, but an unofficial mirror. Please check the primary sources when in doubt.</p><p>This post was automatically created using <a href="https://github.com/malexmave/pdok-mirror" target="blank">pdok-mirror</a> and the python <a href="https://internetarchive.readthedocs.io/en/latest/" target="blank">internetarchive</a> library.</p>',  # TODO Update
+                        language=u"ger",
+                        subject=["Deutscher Bundestag", drucksache.doctype, "Legislaturperiode " + str(period.period_no)]
+                        )
+        if drucksache.autor is not None:
+            metadata['credits'] = drucksache.autor
+        else:
+            metadata['credits'] = u"Unbekannt"
+        if drucksache.urheber is not None:
+            metadata['creator'] = drucksache.urheber
+        else:
+            metadata['creator'] = u"Unbekannt"
+        identifier = 'ger-bt-drucksache-' + drucksache.docno.replace('/', '-')
+        to_upload += [(identifier, {drucksache.path.split('/')[-1]: drucksache.path}, metadata, drucksache)]
+    pool = ThreadPool(processes=10)
+    results = pool.map(upload_parallel, to_upload)
+    pool.close()
+    for result in results:
+        if result is None:
+            continue
+        drucksache, identifier = result
+        drucksache.archive_ident = identifier
+        print "DEBUG: Successfully uploaded", identifier
+        drucksache.save()
+
+
 def upload_parallel(params):
     """Helper function to upload stuff in parallel."""
     if params is None or len(params) != 4:
         print "ERROR: Bad parameters"
         return
-    identifier, files, metadata, plenary = params
-    r = upload(identifier, files=files, metadata=metadata, retries=5, queue_derive=False)
+    identifier, files, metadata, dbobj = params
+    try:
+        r = upload(identifier, files=files, metadata=metadata, retries=5, queue_derive=False)
+    except:
+        print "ERROR: Received exception, stopping upload attempt"
+        return None
     if r[0].status_code != 200:
         print "ERROR: Upload of", identifier, "failed:", r[0].status_code
         return None
     else:
         print "DEBUG: Uploaded", identifier
-        return (plenary, identifier)
+        return (dbobj, identifier)
 
 
 # metadata = dict(collection='test_collection',  # TODO Update
