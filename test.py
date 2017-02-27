@@ -21,7 +21,7 @@ from controller import scraper, uploader
 max_period = 18
 
 for i in range(1, 19, 1):
-    # scraper.scrape_period(i, max_period)
+    scraper.scrape_period(i, max_period)
     uploader.upload_legislaturperiode(i)
 
 
