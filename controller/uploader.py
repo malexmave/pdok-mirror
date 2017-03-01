@@ -122,7 +122,7 @@ def upload_parallel(params):
         return
     identifier, files, metadata, dbobj = params
     try:
-        r = upload(identifier, files=files, metadata=metadata, retries=5)
+        r = upload(identifier, files=files, metadata=metadata, verify=True, retries=5)
     except Exception as e:
         print "ERROR: Received exception, stopping upload attempt"
         print e
